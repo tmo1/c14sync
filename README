@@ -1,0 +1,21 @@
+Introduction:
+
+c14sync is a tool to sync a local directory to or from C14 cold storage [see the c14sync FAQ or https://www.online.net/en/c14 for more information about the C14 platform.] When syncing to C14, c14sync opens an archive's temporary storage space (if it is not yet open), syncs the local directory to the temporary storage space using rsync, rearchives the temporary storage space, and then deletes the old archive (by default). When syncing from C14, c14sync opens the archive's temporary storage space (if it is not yet open), then syncs the local directory from the temporary storage space using rsync.
+
+Installation:
+
+No special installation is required. c14sync depends upon various Perl modules (and their dependencies) [Debian packages are in brackets]:
+	
+	ConfigReader::Simple [libconfigreader-simple-perl]
+	URI						[liburi-perl]
+	Rest::Client			[librest-client-perl]
+	JSON						[libjson-perl]	
+	File::Rsync				[libfile-rsync-perl]
+
+Usage:
+
+c14sync requires a properly prepared C14 account. The safe / archive combination supplied to c14sync must be manually created (https://console.online.net/en/storage/c14/safe/list - at present, c14sync will not create a safe or archive) and an ssh key must be added to the account (https://console.online.net/en/account/ssh-keys). Finally, the account API access token must be retrieved (https://console.online.net/en/api/access).
+
+c14sync is a Perl script. It is invoked as 'c14sync', with appropriate command line options and / or configuration file. The default configuration file is $HOME/.c14sync.conf; an alternative can be specified with the '-c' command line option. There are four required parameters: 'safe_name' (-s) 'archive_name' (-a), 'token' (-t), and 'local_dir' (-l). More information about these and all other parameters can be found in the example configuration file.
+
+By default, c14 syncs the local directory to the C14 archive. If the 'reverse' configuration directive (or -r command line option) is given, the sync direction is reversed and the C14 archive is synced to the local directory.

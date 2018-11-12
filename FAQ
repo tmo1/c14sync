@@ -1,0 +1,15 @@
+What is C14?
+
+C14 cold storage is a cloud storage platform "designed for data archiving & long-term backups". See https://www.online.net/en/c14
+
+Why C14?
+
+Cost. At the time of this writing, C14 cold storage is one of the cheapest options for cloud storage. See https://www.online.net/en/c14#pricing for a price calculator / comparison tool.
+
+Why c14sync?
+
+While files can be transferred to C14 temporary storage space via ssh / sftp / rsync (or rclone via its ssh / sftp backend), these tools and protocols cannot perform the transfer to and from the permanent storage space. Furthermore, when temporary storage space is created, an ephemeral host / port combination for ssh access is created on the fly, and would have to be manually configured for the above tools each time such space is created. c14sync automates the entire workflow of moving data to and from C14 permanent space, wrapping a call to rsync for the actual data transfer with the API calls to move the data to or from permanent storage.
+
+Which parity should I use?
+
+It depends on the specific use case. In a nutshell, if frequent archive / unarchive operations will be performed (such as the original use case that motivated c14sync development - the daily syncing of a borg backup repository to the C14 platform), then 'intensive' will be the most cost effective option. For data that will be accessed less frequently, 'standard' is more appropriate. For a sync from local storage to C14, c14sync generally performs three operations: unarchival of the existing archive, rearchival of the temporary storage space, and deletion of the old archive. For a reverse sync, one operation is performed: unarchival of the existing archive. With 'standard' parity, each operation is billed, while with 'intensive' parity operations are free. C14 provides a tool to calculate total cost for the various parities given various usage parameters: https://www.online.net/en/c14#pricing
