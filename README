@@ -1,21 +1,43 @@
 Introduction:
 
-c14sync is a tool to sync a local directory to or from C14 cold storage [see the c14sync FAQ or https://www.online.net/en/c14 for more information about the C14 platform.] When syncing to C14, c14sync opens an archive's temporary storage space (if it is not yet open), syncs the local directory to the temporary storage space using rsync, rearchives the temporary storage space, and then deletes the old archive (by default). When syncing from C14, c14sync opens the archive's temporary storage space (if it is not yet open), then syncs the local directory from the temporary storage space using rsync.
+c14sync is a tool to programmatically access the C14 cold storage platform via its public API [see https://www.online.net/en/c14 for more information about the platform, and https://console.online.net/en/api/ for the API specification]. c14sync implements several high level 'actions', translating the action and supplied options and configuration directives into a series of API calls and linux commands that accomplish the desired action.
 
 Installation:
 
-No special installation is required. c14sync depends upon various Perl modules (and their dependencies) [Debian packages are in brackets]:
+No special installation is required. c14sync depends upon the following Perl modules (and their dependencies) [Debian packages are in brackets]:
 	
-	ConfigReader::Simple [libconfigreader-simple-perl]
+	ConfigReader::Simple	[libconfigreader-simple-perl]
 	URI						[liburi-perl]
 	Rest::Client			[librest-client-perl]
-	JSON						[libjson-perl]	
+	JSON					[libjson-perl]	
 	File::Rsync				[libfile-rsync-perl]
+	
+sshfs [sshfs] is also required in order to use the 'sshfs' action.
 
 Usage:
 
 c14sync requires a properly prepared C14 account. The safe / archive combination supplied to c14sync must be manually created (https://console.online.net/en/storage/c14/safe/list - at present, c14sync will not create a safe or archive) and an ssh key must be added to the account (https://console.online.net/en/account/ssh-keys). Finally, the account API access token must be retrieved (https://console.online.net/en/api/access).
 
-c14sync is a Perl script. It is invoked as 'c14sync', with appropriate command line options and / or configuration file. The default configuration file is $HOME/.c14sync.conf; an alternative can be specified with the '-c' command line option. There are four required parameters: 'safe_name' (-s) 'archive_name' (-a), 'token' (-t), and 'local_dir' (-l). More information about these and all other parameters can be found in the example configuration file.
+c14sync is invoked as 'c14sync [options] [action]', with appropriate command line options and / or configuration file. The default configuration file is $HOME/.c14sync.conf; an alternative can be specified with the '-c' command line option. There are three parameters required for all actions: 'safe_name' (-s) 'archive_name' (-a), and 'token' (-t). For some actions, 'local_dir' (-l) is required. More information about these and all other parameters can be found in the example configuration file.
 
-By default, c14 syncs the local directory to the C14 archive. If the 'reverse' configuration directive (or -r command line option) is given, the sync direction is reversed and the C14 archive is synced to the local directory.
+Currently implemented actions are:
+
+'sync'		By default, syncs the local directory to the C14 archive. If the 'reverse' configuration directive (or -r command line option) is given, the sync direction is reversed and the C14 archive is synced to the local directory. [This is the default action, if 'action' is omitted.] Specifically, the archive is opened if it is not already open, rsync is called, the temporary space is rearchived, and the original archive is deleted. A local directory must be supplied.
+
+'sshfs'		Mounts the C14 archive (using sshfs) to the local directory (which must be empty). Specifically, the archive is opened if it is not already open, then sshfs is called. A local directory must be supplied. [To umount, use 'fusermount -u local_dir'.]
+
+'rearchive'	Rearchives the C14 archive's temporary space, then deletes the original archive.
+
+Examples:
+
+I run something like "c14sync -l /path_to_borg_repo sync" following a nightly borg run to sync my borg repository to C14 storage.
+
+To backup straight to C14 storage, the following sequence can be used:
+
+	c14sync -l /path_to_mount_point sshfs
+	<backup commands or scripts>
+	...
+	fusermount -u /path_to_mount_point
+	c14sync rearchive
+
+[All operations must only rely upon filesystem features supported by sshfs.]

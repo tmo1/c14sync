@@ -13,3 +13,7 @@ While files can be transferred to C14 temporary storage space via ssh / sftp / r
 Which parity should I use?
 
 It depends on the specific use case. In a nutshell, if frequent archive / unarchive operations will be performed (such as the original use case that motivated c14sync development - the daily syncing of a borg backup repository to the C14 platform), then 'intensive' will be the most cost effective option. For data that will be accessed less frequently, 'standard' is more appropriate. For a sync from local storage to C14, c14sync generally performs three operations: unarchival of the existing archive, rearchival of the temporary storage space, and deletion of the old archive. For a reverse sync, one operation is performed: unarchival of the existing archive. With 'standard' parity, each operation is billed, while with 'intensive' parity operations are free. C14 provides a tool to calculate total cost for the various parities given various usage parameters: https://www.online.net/en/c14#pricing
+
+Does c14sync do encryption?
+
+No. Encryption is a complex topic, and best left to programs that specialize in it. c14sync tries to adhere to the Unix philosophy of doing one thing and doing it well. If you want encryption, use software designed to do it, such as EncFS.
