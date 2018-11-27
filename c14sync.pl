@@ -16,6 +16,9 @@ use URI;
 use REST::Client;
 use JSON;
 use File::Rsync;
+use Time::HiRes qw(gettimeofday tv_interval);
+
+my $start_time = [gettimeofday];
 
 # process command line options
 
@@ -102,7 +105,7 @@ sub find_archive {
 		$flag = 1;
 	}
 	die "Safe/archive combination \"$opts{'s'}/$opts{'a'}\" not found - aborting.\n" unless $flag;
-	print "Archive found - API URI:\t$archive->{'$ref'}\n" if $opts{'v'} >= 1;
+	print "[", tv_interval($start_time), "s] Archive found - API URI:\t$archive->{'$ref'}\n" if $opts{'v'} >= 1;
 }
 
 sub open_archive {
@@ -123,7 +126,7 @@ sub open_archive {
 			$archive = &get($archive->{'$ref'});
 			print "Archive status:\t$archive->{'status'}\n" if $opts{'v'} >= 2;
 		} until ($archive->{'status'} eq 'active');
-		print "Bucket is ready.\n" if $opts{'v'} >= 1;
+		print "[", tv_interval($start_time), "s] Bucket is ready.\n" if $opts{'v'} >= 1;
 	}
 	else {print "Archive is open.\n" if $opts{'v'} >= 1}
 }
@@ -140,7 +143,7 @@ sub rsync {
 	($src, $dest) = ("$dest/", $src) if $opts{'r'};
 	$rsync->exec('src' => $src, 'dest' => $dest) || die "Rsync failed.\nRsync stderr:\n", $rsync->err, "\n\n";
 	print $rsync->out if $opts{'v'} >= 1;
-	print "rsync succeeded.\n" if $opts{'v'} >= 1;
+	print "[", tv_interval($start_time), "s] rsync succeeded.\n" if $opts{'v'} >= 1;
 }
 
 sub sshfs {
@@ -152,13 +155,13 @@ sub sshfs {
 	print "$sshfs\n";
 	#$sshfs .= " -d" if $opts{'v'} >=2;
 	!system ($sshfs) || die "sshfs failed!\n";
-	print "sshfs succeeded - \"$opts{'s'} / $opts{'a'}\" is mounted on $opts{'l'}\nUse \"fusermount -u $opts{'l'}\" to umount (optionally followed by \"$program_name rearchive\" if appropriate).\n" if $opts{'v'} >= 1;
+	print "[", tv_interval($start_time), "s] sshfs succeeded - \"$opts{'s'} / $opts{'a'}\" is mounted on $opts{'l'}\nUse \"fusermount -u $opts{'l'}\" to umount (optionally followed by \"$program_name rearchive\" if appropriate).\n" if $opts{'v'} >= 1;
 }
 
 sub rearchive {
 	print "Rearchiving ...\n" if $opts{'v'} >= 1;
 	&post("$archive->{'$ref'}/archive", encode_json({duplicates => 1}), {'Content-Type' => 'application/json'});
-	print "Rearchiving succeeded.\n" if $opts{'v'} >= 1;
+	print "[", tv_interval($start_time), "s] Rearchiving succeeded.\n" if $opts{'v'} >= 1;
 }
 
 sub delete_archive {
@@ -171,7 +174,7 @@ sub delete_archive {
 		} until ($archive->{'status'} eq 'active');
 		print "Deleting old archive ...\n" if $opts{'v'} >= 1;
 		&delete($archive->{'$ref'});
-		print "Archive deletion succeeded.\n" if $opts{'v'} >= 1;
+		print "[", tv_interval($start_time), "s] Archive deletion succeeded.\n" if $opts{'v'} >= 1;
 	}
 	else {
 		print "Parameter 'size' not found in original archive - there is apparently no old archive to delete.\n" if $opts{'v'} >= 1;
