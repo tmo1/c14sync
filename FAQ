@@ -14,6 +14,14 @@ Which parity should I use?
 
 It depends on the specific use case. In a nutshell, if frequent archive / unarchive operations will be performed (such as the original use case that motivated c14sync development - the daily syncing of a borg backup repository to the C14 platform), then 'intensive' will be the most cost effective option. For data that will be accessed less frequently, 'standard' is more appropriate. For a sync from local storage to C14, c14sync generally performs three operations: unarchival of the existing archive, rearchival of the temporary storage space, and deletion of the old archive. For a reverse sync, one operation is performed: unarchival of the existing archive. With 'standard' parity, each operation is billed, while with 'intensive' parity operations are free. C14 provides a tool to calculate total cost for the various parities given various usage parameters: https://www.online.net/en/c14#pricing
 
+Should I use 'rearchive'?
+
+Short answer: done't use 'rearchive' (but do set 'autorearchive', or manually set up a 'rearchive' run).
+
+Longer answer: Online.net bills each archive from the date of creation through the end of the billing period, even if it is deleted before then. Every time an archive is opened and then rearchived, you are billed for the both the old and new archives through the end of the billing period, even if the old one is subsequently deleted. So if you're running c14sync daily to sync local data with a copy on C14 (with the total amount of data remaining roughly constant), with 'rearchive', your bill will be about (15.5 * DATA * COST) [(30/30 * DATA * COST) + (29/30 * DATA * COST) + (28/30 * DATA * COST) ...], while without 'rearchive' your cost will be a little more than (2.5 * DATA * COST). [With a four week billing period and a rearchival once every seven days, the total cost would be approximately ((28/28 * DATA * COST) + (21/28 * DATA * COST) + (14/28 * DATA * COST) + (7/28 * DATA * COST). A billing period of one month is slightly longer than 28 days, so the cost will be slightly higher than 2.5 * DATA * COST.]
+
+Prior to v.0.3.1, 'rearchive' was the default. From that version, it is not.
+
 Does c14sync do encryption?
 
 No. Encryption is a complex topic, and best left to programs that specialize in it. c14sync tries to adhere to the Unix philosophy of doing one thing and doing it well. If you want encryption, use software designed to do it, such as EncFS.

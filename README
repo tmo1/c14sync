@@ -22,13 +22,13 @@ c14sync is invoked as 'c14sync [options] [action]', with appropriate command lin
 
 Currently implemented actions are:
 
-'sync'		By default, syncs the local directory to the C14 archive. If the 'reverse' configuration directive (or -r command line option) is given, the sync direction is reversed and the C14 archive is synced to the local directory. [This is the default action, if 'action' is omitted.] Specifically, the archive is opened if it is not already open, rsync is called, the temporary space is rearchived, and the original archive is deleted. A local directory must be supplied.
+'sync'			By default, syncs the local directory to the C14 archive. If the 'reverse' configuration directive (or -r command line option) is given, the sync direction is reversed and the C14 archive is synced to the local directory. [This is the default action, if 'action' is omitted.] Specifically, the archive is opened if it is not already open, rsync is called, the temporary space is rearchived, and the original archive is deleted. A local directory must be supplied.
 
-'sshfs'		Mounts the C14 archive (using sshfs) to the local directory (which must be empty). Specifically, the archive is opened if it is not already open, then sshfs is called. A local directory must be supplied. [To umount, use 'fusermount -u local_dir'.]
+'sshfs'			Mounts the C14 archive (using sshfs) to the local directory (which must be empty). Specifically, the archive is opened if it is not already open, then sshfs is called. A local directory must be supplied. [To umount, use 'fusermount -u local_dir'.]
 
 'ssh_config'	Another way of programatically making the C14 archive's temporary space available to other applications. This action writes an appropriate ssh configuration stanza to a file ("$HOME/.ssh/c14-$safe_name-$archive_name" by default). ssh-based programs should then be told to connect to 'c14-$safe_name-$archive_name', and must be configured to use the generated configuration file, either directly (e.g., 'sftp -F $HOME/.ssh/c14-$safe_name-$archive_name c14-$safe_name-$archive_name' or 'sshfs c14-$safe_name-$archive_name /path_to_mount_point -o IdentityFile=$HOME/.ssh/c14-$safe_name-$archive_name'), or (with recent versions of ssh) via an 'Include' line in the standard ssh_config file (e.g. 'Include c14-$safe_name-$archive_name' for the default file - see 'man 5 ssh_config'). BE CAREFUL: the file in question will be clobbered if it exists.
 
-'rearchive'	Rearchives the C14 archive's temporary space, then deletes the original archive.
+'rearchive'		Rearchives the C14 archive's temporary space, then deletes the original archive.
 
 Examples:
 

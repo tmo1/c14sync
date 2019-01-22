@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 
-# Copyright (C) 2018 Thomas More - tmore1@gmx.com
+# Copyright (C) 2018-2019 Thomas More - tmore1@gmx.com
 # c14sync is free software, released under the terms of the
 # Perl Artistic License 2.0, contained in the included file 'LICENSE'
 # c14sync comes with ABSOLUTELY NO WARRANTY
@@ -18,18 +18,18 @@ use JSON;
 use File::Rsync;
 use Time::HiRes qw(gettimeofday tv_interval);
 
-my $start_time = [gettimeofday];
+my ($program_name, $program_version, $start_time) = ('c14sync', 0.3.1, [gettimeofday]);
 
 # process command line options
 
-my ($program_name, $program_version) = ('c14sync', 0.3);
 my %opts;
-getopts('rRAmuv:s:a:t:i:l:c:F:', \%opts);
+getopts('rRAmuv:s:a:t:i:l:c:F:q', \%opts);
 
 # set defaults for (some) undefined options
 
-my %defaults = ('v' => 1, 'R' => 1, 'A' => 1);
+my %defaults = ('v' => 1, 'A' => 1, 'q' => 'abort');
 $opts{$_} //= $defaults{$_} foreach keys %defaults;
+print "$program_name $program_version\n" if $opts{'v'} >= 2;
 my $default_conf_file = File::Spec->catfile($ENV{'HOME'}, ".$program_name.conf");
 
 # process config file
@@ -38,11 +38,11 @@ my $conf_file = $opts{'c'} // (-f $default_conf_file ? $default_conf_file : unde
 if ($conf_file) {
 	print "Loading configuration file: $conf_file\n" if $opts{'v'} >= 2;	
 	my $config = ConfigReader::Simple->new($conf_file);
-	my %opts_map = (verbose => 'v', safe_name => 's', archive_name => 'a', identity => 'i', local_dir => 'l', token => 't', reverse => 'r', rearchive => 'R', autorearchive => 'A');
+	my %opts_map = (verbose => 'v', safe_name => 's', archive_name => 'a', identity => 'i', local_dir => 'l', token => 't', reverse => 'r', rearchive => 'R', autorearchive => 'A', nonunique => 'q');
 	foreach ($config->directives) {if (exists $opts_map{$_}) {$opts{$opts_map{$_}} = $config->get($_)} else {print "Undefined configuration file directive '$_' - ignoring.\n";}}
 }
 
-# ensure that universally required parameteres have been supplied
+# ensure that required parameters have been supplied
 
 $opts{'s'} || die "No safe name specified - aborting.\n";
 $opts{'a'} || die "No archive name specified - aborting.\n";
@@ -67,7 +67,7 @@ SWITCH: {
 		&rsync;
 		unless ($opts{'r'} or !$opts{'R'}) {
 			&rearchive;
-			&delete_archive;
+			&delete_archive($archive);
 		} # we don't rearchive after a reverse rsync, or if told not to do so
 		last SWITCH;
 	}
@@ -83,7 +83,7 @@ SWITCH: {
 	}
 	if ($ARGV[0] eq 'rearchive') {
 		&rearchive;
-		&delete_archive;
+		&delete_archive($archive);
 		last SWITCH;
 	}
 	die "Undefined action '$ARGV[0]'. Action must be one of 'sync' [default], 'sshfs', or 'rearchive'.\n";
@@ -97,16 +97,28 @@ sub find_archive {
 	print "Checking whether safe / archive combination \"$opts{'s'} / $opts{'a'}\" exists.\nGetting list of archives ...\n" if $opts{'v'} >= 2;
 	my $archive_list = &get("${c14_basepath}/archive");
 	print "Got list of archives.\n" if $opts{'v'} >= 2;
-	my ($safe, $flag);
+	my ($safe, $archive_iterator);
 	foreach (@{$archive_list}) {
 		next unless ($_->{'name'} eq $opts{'a'});
-		$archive = &get($_->{'$ref'});
-		$safe = &get($archive->{'safe'}{'$ref'});
+		$archive_iterator = &get($_->{'$ref'});
+		$safe = &get($archive_iterator->{'safe'}{'$ref'});
 		next unless ($safe->{'name'} eq $opts{'s'});
-		die "Safe / archive combination \"$opts{'s'} / $opts{'a'}\" is not unique - aborting.\n" if $flag;
-		$flag = 1;
+		print "Found a matching safe / archive combination - API URI:\t$archive_iterator->{'$ref'}\n" if $opts{'v'} >= 2;
+		if ($archive) {
+			die "Safe / archive combination \"$opts{'s'} / $opts{'a'}\" is not unique - aborting (use the 'nonunique' configuration directive to proceed anyway).\n" if $opts{'q'} eq 'abort';
+			if ($archive->{'creation_date'} lt $archive_iterator->{'creation_date'}) {
+				print "This one is the newest matching combination so far.\n" if $opts{'v'} >= 2;
+				($archive, $archive_iterator) = ($archive_iterator, $archive);
+			}
+			if ($opts{'q'} eq 'delete') {
+				die "Older version of archive is not ready for deletion - aborting.\n" unless ($archive_iterator->{'status'} eq 'active');
+				print "Attempting to delete older version of archive - API URI:\t$archive_iterator->{'$ref'}\n" if $opts{'v'} >= 1;
+				&delete_archive($archive_iterator);
+			}
+		}
+		else {$archive = $archive_iterator}
 	}
-	die "Safe/archive combination \"$opts{'s'}/$opts{'a'}\" not found - aborting.\n" unless $flag;
+	die "Safe / archive combination \"$opts{'s'}/$opts{'a'}\" not found - aborting.\n" unless $archive;
 	print "[", tv_interval($start_time), "s] Archive found - API URI:\t$archive->{'$ref'}\n" if $opts{'v'} >= 1;
 }
 
@@ -122,7 +134,7 @@ sub open_archive {
 		print "Got archive locations.\n" if $opts{'v'} >= 2;
 		print "Unarchiving ...\n" if $opts{'v'} >= 1;
 		&post("$archive->{'$ref'}/unarchive", encode_json({location_id => ${$locations}[0]{'uuid_ref'}, rearchive => (($opts{'A'} && !$opts{'r'}) ? 1 : 0), protocols => ['SSH'], ssh_keys => [map {$_->{'uuid_ref'}} @{$ssh_keys}]}), {'Content-Type' => 'application/json'});
-		print "Unarchiving successful. Waiting for bucket to be ready ...\n" if $opts{'v'} >= 1;
+		print "Unarchival successful. Waiting for bucket to be ready ...\n" if $opts{'v'} >= 1;
 		do {
 			sleep 15;
 			$archive = &get($archive->{'$ref'});
@@ -145,7 +157,7 @@ sub rsync {
 	($src, $dest) = ("$dest/", $src) if $opts{'r'};
 	$rsync->exec('src' => $src, 'dest' => $dest) || die "Rsync failed.\nRsync stderr:\n", $rsync->err, "\n\n";
 	print $rsync->out if $opts{'v'} >= 1;
-	print "[", tv_interval($start_time), "s] rsync succeeded.\n" if $opts{'v'} >= 1;
+	print "[", tv_interval($start_time), "s] rsync successful.\n" if $opts{'v'} >= 1;
 }
 
 sub sshfs {
@@ -157,7 +169,7 @@ sub sshfs {
 		. (defined $opts{'i'} ? " -o IdentityFile=$opts{'i'} " : '') . (defined $opts{'d'} ? " -d" : '');
 	print "sshfs command:\t$sshfs\n" if $opts{'v'} >= 2;
 	!system ($sshfs) || die "sshfs failed: $?\n";
-	print "[", tv_interval($start_time), "s] sshfs succeeded - \"$opts{'s'} / $opts{'a'}\" is mounted on $opts{'l'}\nUse \"fusermount -u $opts{'l'}\" to umount (optionally followed by \"$program_name rearchive\" if appropriate).\n" if $opts{'v'} >= 1;
+	print "[", tv_interval($start_time), "s] sshfs successful - \"$opts{'s'} / $opts{'a'}\" is mounted on $opts{'l'}\nUse \"fusermount -u $opts{'l'}\" to umount (optionally followed by \"$program_name rearchive\" if appropriate).\n" if $opts{'v'} >= 1;
 }
 
 sub ssh_config {
@@ -184,23 +196,26 @@ EOF
 sub rearchive {
 	print "Rearchiving ...\n" if $opts{'v'} >= 1;
 	&post("$archive->{'$ref'}/archive", encode_json({duplicates => 1}), {'Content-Type' => 'application/json'});
-	print "[", tv_interval($start_time), "s] Rearchiving succeeded.\n" if $opts{'v'} >= 1;
+	print "[", tv_interval($start_time), "s] Rearchival successful.\n" if $opts{'v'} >= 1;
 }
 
+# unlike the other subroutines which work on global $archive, delete_archive expects to be passed the name of an archive to delete
+
 sub delete_archive {
-	if (defined $archive->{'size'}) {
-		print "Attempting to delete old archive. Waiting for archive to be ready ...\n" if 	$opts{'v'} >= 1;
+	my $del = $_[0];
+	if (defined $del->{'size'}) {
+		print "Attempting to delete archive. Waiting for it to be ready ...\n" if $opts{'v'} >= 1;
 		do {
 			sleep 15;
-			$archive = &get($archive->{'$ref'});
-			print "Archive status:\t$archive->{'status'}\n" if $opts{'v'} >= 2;
-		} until ($archive->{'status'} eq 'active');
+			$del = &get($del->{'$ref'});
+			print "Archive status:\t$del->{'status'}\n" if $opts{'v'} >= 2;
+		} until ($del->{'status'} eq 'active');
 		print "Deleting old archive ...\n" if $opts{'v'} >= 1;
-		&delete($archive->{'$ref'});
-		print "[", tv_interval($start_time), "s] Archive deletion succeeded.\n" if $opts{'v'} >= 1;
+		&delete($del->{'$ref'});
+		print "[", tv_interval($start_time), "s] Archive deletion successful.\n" if $opts{'v'} >= 1;
 	}
 	else {
-		print "Parameter 'size' not found in original archive - there is apparently no old archive to delete.\n" if $opts{'v'} >= 1;
+		print "Parameter 'size' not found - there is apparently no archive to delete.\n" if $opts{'v'} >= 1;
 	}
 }
 
