@@ -18,7 +18,7 @@ use JSON;
 use File::Rsync;
 use Time::HiRes qw(gettimeofday tv_interval);
 
-my ($program_name, $program_version, $start_time) = ('c14sync', 0.3.1, [gettimeofday]);
+my ($program_name, $program_version, $start_time) = ('c14sync', 0.3.2, [gettimeofday]);
 
 # process command line options
 
@@ -27,7 +27,7 @@ getopts('rRAmuv:s:a:t:i:l:c:F:q', \%opts);
 
 # set defaults for (some) undefined options
 
-my %defaults = ('v' => 1, 'A' => 1, 'q' => 'abort');
+my %defaults = ('v' => 1, 'A' => 1, 'q' => 'abort', T => 0);
 $opts{$_} //= $defaults{$_} foreach keys %defaults;
 print "$program_name $program_version\n" if $opts{'v'} >= 2;
 my $default_conf_file = File::Spec->catfile($ENV{'HOME'}, ".$program_name.conf");
@@ -38,7 +38,7 @@ my $conf_file = $opts{'c'} // (-f $default_conf_file ? $default_conf_file : unde
 if ($conf_file) {
 	print "Loading configuration file: $conf_file\n" if $opts{'v'} >= 2;	
 	my $config = ConfigReader::Simple->new($conf_file);
-	my %opts_map = (verbose => 'v', safe_name => 's', archive_name => 'a', identity => 'i', local_dir => 'l', token => 't', reverse => 'r', rearchive => 'R', autorearchive => 'A', nonunique => 'q');
+	my %opts_map = (verbose => 'v', safe_name => 's', archive_name => 'a', identity => 'i', local_dir => 'l', token => 't', reverse => 'r', rearchive => 'R', autorearchive => 'A', nonunique => 'q', timeout => 'T');
 	foreach ($config->directives) {if (exists $opts_map{$_}) {$opts{$opts_map{$_}} = $config->get($_)} else {print "Undefined configuration file directive '$_' - ignoring.\n";}}
 }
 
@@ -134,15 +134,17 @@ sub open_archive {
 		print "Got archive locations.\n" if $opts{'v'} >= 2;
 		print "Unarchiving ...\n" if $opts{'v'} >= 1;
 		&post("$archive->{'$ref'}/unarchive", encode_json({location_id => ${$locations}[0]{'uuid_ref'}, rearchive => (($opts{'A'} && !$opts{'r'}) ? 1 : 0), protocols => ['SSH'], ssh_keys => [map {$_->{'uuid_ref'}} @{$ssh_keys}]}), {'Content-Type' => 'application/json'});
-		print "Unarchival successful. Waiting for bucket to be ready ...\n" if $opts{'v'} >= 1;
-		do {
-			sleep 15;
-			$archive = &get($archive->{'$ref'});
-			print "Archive status:\t$archive->{'status'}\n" if $opts{'v'} >= 2;
-		} until ($archive->{'status'} eq 'active');
-		print "[", tv_interval($start_time), "s] Bucket is ready.\n" if $opts{'v'} >= 1;
+		print "Unarchival successful.\n" if $opts{'v'} >= 1;
 	}
 	else {print "Archive is open.\n" if $opts{'v'} >= 1}
+	until ($archive->{'status'} eq 'active' && $archive->{'bucket'}) {
+		die "Timeout ($opts{'T'} seconds) exceeded - aborting.\n" if ($opts{'T'} && tv_interval($start_time) > $opts{'T'});
+		print "Waiting for archive to be ready ...\n" if $opts{'v'} >= 1;
+		sleep 15;
+		$archive = &get($archive->{'$ref'});
+		print "Archive status:\t$archive->{'status'}\n" if $opts{'v'} >= 2;
+	} 
+	print "[", tv_interval($start_time), "s] Archive is ready.\n" if $opts{'v'} >= 1;
 }
 
 sub rsync {
